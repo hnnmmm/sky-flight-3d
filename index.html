@@ -421,7 +421,7 @@
     const fwdH = new THREE.Vector3(), rightV = new THREE.Vector3();
 
     // ================= 重力感应 =================
-    const gyro = { available: false, beta: 0, gamma: 0, neutralBeta: null, neutralGamma: null, frames: 0 };
+    const gyro = { available: false, beta: 0, gamma: 0, neutralBeta: null, neutralGamma: null, frames: 0, sGamma: 0, sBeta: 0, init: false };
     function enableGyro() {
       window.addEventListener('deviceorientation', (e) => {
         if (e.gamma == null && e.beta == null) return;
@@ -674,12 +674,25 @@
         if (gyro.available) {
           const ng = gyro.neutralGamma == null ? gyro.gamma : gyro.neutralGamma;
           const nb = gyro.neutralBeta == null ? gyro.beta : gyro.neutralBeta;
-          let gx = gyro.gamma - ng;   // 左右侧摆 → 转向
-          let by = gyro.beta - nb;    // 前后抬起/放下 → 俯仰
-          if (Math.abs(gx) < 1.5) gx = 0;
-          if (Math.abs(by) < 1.5) by = 0;
-          mx = clamp(gx / 28, -1, 1);
-          my = clamp(by / 30, -1, 1);
+          const gx = gyro.gamma - ng;   // 左右侧摆 → 转向
+          const by = gyro.beta - nb;    // 前后抬起/放下 → 俯仰
+
+          // 首帧对齐，避免初始化跳变
+          if (!gyro.init) { gyro.sGamma = gx; gyro.sBeta = by; gyro.init = true; }
+
+          // 低通滤波（tau≈30ms）：滤除传感器高频抖动，快速转动仍紧跟，消除失稳
+          const inputK = 1 - Math.exp(-dt / 0.03);
+          gyro.sGamma = THREE.MathUtils.lerp(gyro.sGamma, gx, inputK);
+          gyro.sBeta = THREE.MathUtils.lerp(gyro.sBeta, by, inputK);
+
+          let fx = gyro.sGamma, fy = gyro.sBeta;
+          // 极小死区：仅消除静止漂移，不影响快速大角度操控
+          if (Math.abs(fx) < 1.0) fx = 0;
+          if (Math.abs(fy) < 1.0) fy = 0;
+
+          // 约 ±26° 侧摆 / ±28° 俯仰即满舵，实现 360° 全方位连续操控
+          mx = clamp(fx / 26, -1, 1);
+          my = clamp(fy / 28, -1, 1);
         } else {
           let kx = 0, ky = 0;
           if (keys['ArrowLeft'] || keys['KeyA']) kx -= 1;
@@ -691,10 +704,12 @@
         }
 
         // 输入映射为角速度：保持倾斜/按住 = 持续转向，回正才停止
+        // 极速逼近（tau≈20ms）：近乎 1:1 跟随陀螺仪，快速转动不再滞后失稳
         const targetYawRate = mx * MAX_YAW_RATE;
         const targetPitchRate = my * MAX_PITCH_RATE;
-        state.yawRate = THREE.MathUtils.lerp(state.yawRate, targetYawRate, 1 - Math.pow(0.001, dt));
-        state.pitchRate = THREE.MathUtils.lerp(state.pitchRate, targetPitchRate, 1 - Math.pow(0.001, dt));
+        const rateK = 1 - Math.exp(-dt / 0.02);
+        state.yawRate = THREE.MathUtils.lerp(state.yawRate, targetYawRate, rateK);
+        state.pitchRate = THREE.MathUtils.lerp(state.pitchRate, targetPitchRate, rateK);
         state.yaw += state.yawRate * dt;
         state.pitch = clamp(state.pitch + state.pitchRate * dt, -MAX_PITCH_ANGLE, MAX_PITCH_ANGLE);
 
@@ -704,7 +719,10 @@
         const cp = Math.cos(state.pitch);
         dir.set(-Math.sin(state.yaw) * cp, Math.sin(state.pitch), -Math.cos(state.yaw) * cp).normalize();
         player.group.position.addScaledVector(dir, state.speed * dt);
-        state.roll = THREE.MathUtils.lerp(state.roll, -mx * 0.8, 1 - Math.pow(0.001, dt));
+
+        // 协调转弯：倾角由实际角速度决定，机头与飞行方向始终同步、稳定
+        const bank = clamp(-state.yawRate / MAX_YAW_RATE, -1, 1) * 0.85;
+        state.roll = THREE.MathUtils.lerp(state.roll, bank, rateK);
         player.group.rotation.set(state.pitch, state.yaw, state.roll);
 
         if (player.group.position.y < 7) { player.group.position.y = 7; state.pitch = Math.max(state.pitch, 0); }
