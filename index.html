@@ -421,14 +421,25 @@
     const fwdH = new THREE.Vector3(), rightV = new THREE.Vector3();
 
     // ================= 重力感应 =================
-    const gyro = { available: false, beta: 0, gamma: 0, neutralBeta: null };
+    const gyro = { available: false, beta: 0, gamma: 0, neutralBeta: null, neutralGamma: null, frames: 0 };
     function enableGyro() {
       window.addEventListener('deviceorientation', (e) => {
         if (e.gamma == null && e.beta == null) return;
         gyro.available = true;
         gyro.beta = e.beta || 0;
         gyro.gamma = e.gamma || 0;
-        if (gyro.neutralBeta == null) gyro.neutralBeta = gyro.beta;
+        // 用开局前 30 帧均值标定「水平/竖直」基准，消除手持时的自然倾角
+        if (gyro.frames < 30) {
+          gyro.frames++;
+          if (gyro.neutralBeta == null) {
+            gyro.neutralBeta = gyro.beta;
+            gyro.neutralGamma = gyro.gamma;
+          } else {
+            const w = 1 / gyro.frames;
+            gyro.neutralBeta += (gyro.beta - gyro.neutralBeta) * w;
+            gyro.neutralGamma += (gyro.gamma - gyro.neutralGamma) * w;
+          }
+        }
       });
     }
 
@@ -661,9 +672,14 @@
         // 转向输入：-1..1（gyro 用倾斜角，鼠标/键盘叠加持续转向）
         let mx = state.mouseX, my = state.mouseY;
         if (gyro.available) {
+          const ng = gyro.neutralGamma == null ? gyro.gamma : gyro.neutralGamma;
           const nb = gyro.neutralBeta == null ? gyro.beta : gyro.neutralBeta;
-          mx = clamp(gyro.gamma / 28, -1, 1);
-          my = clamp((gyro.beta - nb) / 30, -1, 1);
+          let gx = gyro.gamma - ng;   // 左右侧摆 → 转向
+          let by = gyro.beta - nb;    // 前后抬起/放下 → 俯仰
+          if (Math.abs(gx) < 1.5) gx = 0;
+          if (Math.abs(by) < 1.5) by = 0;
+          mx = clamp(gx / 28, -1, 1);
+          my = clamp(by / 30, -1, 1);
         } else {
           let kx = 0, ky = 0;
           if (keys['ArrowLeft'] || keys['KeyA']) kx -= 1;
