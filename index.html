@@ -2,7 +2,8 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Sky Flight 3D · 天空飞行</title>
   <style>
     :root {
@@ -17,48 +18,102 @@
       color: var(--ink);
       cursor: crosshair;
       -webkit-user-select: none; user-select: none;
+      touch-action: none;
     }
     canvas { display: block; }
+    .hidden { display: none !important; }
 
-    /* HUD 标题 */
-    .hud {
-      position: fixed; inset: 0; pointer-events: none; z-index: 10;
-    }
-    .title {
-      position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
-      text-align: center; text-shadow: 0 2px 18px rgba(0,0,0,0.35);
-    }
-    .title h1 {
-      font-size: clamp(22px, 4vw, 40px); font-weight: 700;
-      letter-spacing: 0.08em; background: linear-gradient(180deg, #fff, #9ed4ff);
-      -webkit-background-clip: text; background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .title p { margin-top: 6px; font-size: 13px; opacity: 0.85; letter-spacing: 0.12em; }
-
-    .instruments {
-      position: absolute; left: 22px; bottom: 22px;
-      display: flex; gap: 14px; align-items: flex-end;
-      text-shadow: 0 1px 8px rgba(0,0,0,0.4);
-    }
-    .gauge { min-width: 92px; }
-    .gauge .label { font-size: 10px; letter-spacing: 0.18em; opacity: 0.7; text-transform: uppercase; }
-    .gauge .value { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
-
-    .hint {
-      position: absolute; right: 22px; bottom: 22px; text-align: right;
-      font-size: 12px; line-height: 1.9; opacity: 0.75; text-shadow: 0 1px 8px rgba(0,0,0,0.4);
-    }
-    .hint b { color: var(--accent); font-weight: 600; }
-
-    .fade {
-      position: absolute; top: 0; left: 0; right: 0; height: 90px;
-      background: linear-gradient(180deg, rgba(10,20,40,0.35), transparent);
-    }
+    /* ---- HUD ---- */
+    .hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
     .vignette {
       position: absolute; inset: 0;
       background: radial-gradient(120% 120% at 50% 45%, transparent 55%, rgba(5,10,25,0.38) 100%);
     }
+    .fade {
+      position: absolute; top: 0; left: 0; right: 0; height: 90px;
+      background: linear-gradient(180deg, rgba(10,20,40,0.35), transparent);
+    }
+    .title {
+      position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+      text-align: center; text-shadow: 0 2px 18px rgba(0,0,0,0.35);
+    }
+    .title h1 {
+      font-size: clamp(20px, 4vw, 36px); font-weight: 700; letter-spacing: 0.08em;
+      background: linear-gradient(180deg, #fff, #9ed4ff);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .title p { margin-top: 4px; font-size: 12px; opacity: 0.85; letter-spacing: 0.12em; }
+
+    .top-left {
+      position: absolute; top: 16px; left: 16px;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.4); line-height: 1.35;
+    }
+    .score { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .score .label { font-size: 11px; font-weight: 500; opacity: 0.75; letter-spacing: 0.15em; }
+    .hearts { margin-top: 4px; font-size: 18px; letter-spacing: 3px; }
+    .coins-badge { font-size: 13px; opacity: 0.9; margin-top: 2px; }
+
+    .instruments {
+      position: absolute; left: 16px; bottom: 16px;
+      display: flex; gap: 14px; align-items: flex-end;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.4);
+    }
+    .gauge .label { font-size: 10px; letter-spacing: 0.18em; opacity: 0.7; text-transform: uppercase; }
+    .gauge .value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    .hint {
+      position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+      text-align: center; font-size: 11px; line-height: 1.9; opacity: 0.7; white-space: nowrap;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.4);
+    }
+    .hint b { color: var(--accent); font-weight: 600; }
+
+    .mute {
+      position: absolute; top: 16px; right: 16px; width: 40px; height: 40px;
+      pointer-events: auto; border: 1px solid rgba(255,255,255,0.3); border-radius: 50%;
+      background: rgba(255,255,255,0.08); color: #fff; font-size: 18px; cursor: pointer;
+      backdrop-filter: blur(4px);
+    }
+
+    /* ---- 触控按钮 ---- */
+    .controls { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
+    .btn {
+      position: absolute; width: 86px; height: 86px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.35); color: #fff; pointer-events: auto;
+      font-size: 15px; font-weight: 700; line-height: 1.15; letter-spacing: 0.05em;
+      background: rgba(20,40,70,0.35); backdrop-filter: blur(3px);
+      -webkit-tap-highlight-color: transparent; touch-action: none;
+    }
+    .btn span { display: block; font-size: 9px; font-weight: 500; opacity: 0.6; letter-spacing: 0.2em; }
+    .btn.fire { left: 22px; bottom: 110px; background: rgba(180,40,40,0.32); }
+    .btn.boost { right: 22px; bottom: 110px; background: rgba(20,140,90,0.30); }
+    .btn:active { transform: scale(0.92); }
+    .btn.on { background: rgba(255,255,255,0.28); }
+
+    /* ---- 覆盖层 ---- */
+    .overlay {
+      position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; text-align: center; gap: 18px;
+      background: radial-gradient(120% 120% at 50% 40%, rgba(10,20,40,0.55), rgba(5,10,25,0.72));
+      pointer-events: auto;
+    }
+    .overlay h2 { font-size: 30px; font-weight: 800; letter-spacing: 0.1em; }
+    .overlay .sub { font-size: 14px; opacity: 0.85; max-width: 340px; line-height: 1.8; }
+    .overlay .big-score { font-size: 46px; font-weight: 800; color: #ffdf7a; }
+    .cta {
+      pointer-events: auto; padding: 14px 34px; font-size: 16px; font-weight: 700; letter-spacing: 0.1em;
+      color: #06233a; background: linear-gradient(180deg, #fff, #9ed4ff); border: none; border-radius: 999px;
+      cursor: pointer; box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+    }
+    .cta:active { transform: scale(0.96); }
+
+    .damage-flash {
+      position: fixed; inset: 0; z-index: 15; pointer-events: none; opacity: 0;
+      background: radial-gradient(120% 120% at 50% 50%, transparent 40%, rgba(255,40,40,0.55) 100%);
+      transition: opacity 0.08s;
+    }
+    .damage-flash.on { opacity: 1; }
   </style>
 </head>
 <body>
@@ -69,21 +124,41 @@
       <h1>SKY FLIGHT 3D</h1>
       <p>天空飞行 · 穿越云海</p>
     </div>
+    <div class="top-left">
+      <div class="score"><span class="label">得分</span> <span id="score">0</span></div>
+      <div class="hearts" id="hearts">❤❤❤</div>
+      <div class="coins-badge">🪙 <span id="coins">0</span></div>
+    </div>
     <div class="instruments">
-      <div class="gauge">
-        <div class="label">速度 Speed</div>
-        <div class="value" id="speed">0</div>
-      </div>
-      <div class="gauge">
-        <div class="label">高度 Alt</div>
-        <div class="value" id="alt">0</div>
-      </div>
+      <div class="gauge"><div class="label">速度</div><div class="value" id="speed">0</div></div>
+      <div class="gauge"><div class="label">高度</div><div class="value" id="alt">0</div></div>
     </div>
-    <div class="hint">
-      移动鼠标 <b>操控方向</b><br />
-      按住 <b>左键 / 触屏</b> 加速<br />
-      松手自动巡航
+    <button class="mute" id="muteBtn" aria-label="静音">♪</button>
+    <div class="hint" id="hint">
+      移动鼠标 / 倾斜手机 <b>转向</b> · 空格 <b>开火</b> · Shift <b>加速</b>
     </div>
+  </div>
+
+  <div class="controls hidden" id="controls">
+    <button class="btn fire" id="fireBtn">开火<span>FIRE</span></button>
+    <button class="btn boost" id="boostBtn">加速<span>BOOST</span></button>
+  </div>
+
+  <div class="damage-flash" id="damageFlash"></div>
+
+  <div class="overlay" id="startOverlay">
+    <h2>SKY FLIGHT 3D</h2>
+    <div class="sub">
+      驾驶战机穿越云海，躲避山脉、击落敌机、收集金币。<br />
+      首次点击将开启声音与重力感应。
+    </div>
+    <button class="cta" id="startBtn">点击开始</button>
+  </div>
+
+  <div class="overlay hidden" id="gameOverOverlay">
+    <h2>游戏结束</h2>
+    <div class="big-score" id="finalScore">0</div>
+    <button class="cta" id="restartBtn">重新开始</button>
   </div>
 
   <script type="importmap">
@@ -97,7 +172,33 @@
   <script type="module">
     import * as THREE from 'three';
 
-    // ---------- 基础渲染 ----------
+    // ================= 工具 =================
+    const rand = (a = 1, b) => (b === undefined ? Math.random() * a : a + Math.random() * (b - a));
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    function seededRand(seed) {
+      let t = seed + 0x6D2B79F5;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+    function noise(x, y) {
+      const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+      return n - Math.floor(n);
+    }
+    function disposeMesh(o) {
+      o.geometry && o.geometry.dispose();
+      o.material && (Array.isArray(o.material) ? o.material.forEach(m => m.dispose()) : o.material.dispose());
+    }
+    function disposeGroup(g) {
+      g.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
+        }
+      });
+    }
+
+    // ================= 渲染基础 =================
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -109,11 +210,9 @@
     const FOG_COLOR = new THREE.Color(0xbfe3f2);
     scene.fog = new THREE.Fog(FOG_COLOR, 120, 900);
 
-    const camera = new THREE.PerspectiveCamera(
-      60, window.innerWidth / window.innerHeight, 0.1, 4000
-    );
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 4000);
 
-    // ---------- 天空穹顶 ----------
+    // ================= 天空 =================
     function makeSkyTexture() {
       const c = document.createElement('canvas');
       c.width = 2; c.height = 512;
@@ -133,36 +232,20 @@
       new THREE.SphereGeometry(2800, 32, 18),
       new THREE.MeshBasicMaterial({ map: makeSkyTexture(), side: THREE.BackSide, fog: false })
     );
-    sky.position.y = -40;
     scene.add(sky);
 
-    // ---------- 光照 ----------
+    // ================= 光照 =================
     const sunLight = new THREE.DirectionalLight(0xfff3e0, 2.6);
-    sunLight.position.set(300, 520, -180);
     sunLight.castShadow = true;
-    sunLight.shadow.mapSize.set(2048, 2048);
-    sunLight.shadow.camera.left = -400;
-    sunLight.shadow.camera.right = 400;
-    sunLight.shadow.camera.top = 400;
-    sunLight.shadow.camera.bottom = -400;
-    sunLight.shadow.camera.far = 1600;
+    sunLight.shadow.mapSize.set(1024, 1024);
+    sunLight.shadow.camera.left = -300;
+    sunLight.shadow.camera.right = 300;
+    sunLight.shadow.camera.top = 300;
+    sunLight.shadow.camera.bottom = -300;
+    sunLight.shadow.camera.far = 1200;
     scene.add(sunLight);
     scene.add(sunLight.target);
-
-    const hemi = new THREE.HemisphereLight(0xd7ecff, 0x35506b, 0.9);
-    scene.add(hemi);
-
-    // 太阳光斑
-    const sunGlow = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        map: makeGlowTexture('#fff6df', '#ffd98a'),
-        blending: THREE.AdditiveBlending,
-        depthWrite: false, fog: false,
-      })
-    );
-    sunGlow.position.copy(sunLight.position).normalize().multiplyScalar(2400);
-    sunGlow.scale.setScalar(700);
-    scene.add(sunGlow);
+    scene.add(new THREE.HemisphereLight(0xd7ecff, 0x35506b, 0.9));
 
     function makeGlowTexture(inner, outer) {
       const c = document.createElement('canvas');
@@ -178,311 +261,581 @@
       tex.colorSpace = THREE.SRGBColorSpace;
       return tex;
     }
+    const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeGlowTexture('#fff6df', '#ffd98a'), blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+    }));
+    sunGlow.position.set(900, 1600, -600);
+    sunGlow.scale.setScalar(700);
+    scene.add(sunGlow);
 
-    // ---------- 海面 ----------
-    const waterGeo = new THREE.PlaneGeometry(6000, 6000, 128, 128);
+    // ================= 海面 =================
+    const waterGeo = new THREE.PlaneGeometry(6000, 6000, 96, 96);
     waterGeo.rotateX(-Math.PI / 2);
     const water = new THREE.Mesh(
-      waterGeo,
-      new THREE.MeshStandardMaterial({ color: 0x2686bd, roughness: 0.25, metalness: 0.05 })
+      waterGeo, new THREE.MeshStandardMaterial({ color: 0x2686bd, roughness: 0.25, metalness: 0.05 })
     );
     water.receiveShadow = true;
     scene.add(water);
 
-    // ---------- 岛屿 ----------
-    function seededRand(seed) {
-      let t = seed + 0x6D2B79F5;
-      t = Math.imul(t ^ (t >>> 15), t | 1);
-      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    }
-    function noise(x, y) {
-      const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
-      return n - Math.floor(n);
-    }
-
+    // ================= 远处岛屿 =================
     function createIsland(cx, cz, radius, peak) {
-      const seg = 48;
-      const geo = new THREE.PlaneGeometry(radius * 2, radius * 2, seg, seg);
+      const geo = new THREE.PlaneGeometry(radius * 2, radius * 2, 40, 40);
       geo.rotateX(-Math.PI / 2);
       const pos = geo.attributes.position;
       const colors = new Float32Array(pos.count * 3);
-      const sand = new THREE.Color(0xd9c188);
-      const grass = new THREE.Color(0x4e8a4a);
-      const dark = new THREE.Color(0x2f6136);
-      const rock = new THREE.Color(0x8a9a92);
-      const tmp = new THREE.Color();
-
+      const sand = new THREE.Color(0xd9c188), grass = new THREE.Color(0x4e8a4a);
+      const dark = new THREE.Color(0x2f6136), rock = new THREE.Color(0x8a9a92), tmp = new THREE.Color();
       for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i);
-        const z = pos.getZ(i);
-        const d = Math.sqrt(x * x + z * z) / radius; // 0 中心 -> 1 边缘
-        let h = (1 - d * d) * peak;
-        if (h <= 0) h = 0;
-        // 加入轻微起伏
-        h += (noise(cx + x * 0.04, cz + z * 0.04) - 0.5) * peak * 0.35;
+        const x = pos.getX(i), z = pos.getZ(i);
+        const d = Math.sqrt(x * x + z * z) / radius;
+        let h = Math.max(0, (1 - d * d) * peak) + (noise(cx + x * 0.04, cz + z * 0.04) - 0.5) * peak * 0.3;
         h = Math.max(0, h);
         pos.setY(i, h);
-
-        const t = d;
         if (h < 2.0) tmp.copy(sand);
-        else if (t < 0.35) tmp.copy(grass);
-        else if (t < 0.7) tmp.copy(dark);
+        else if (d < 0.35) tmp.copy(grass);
+        else if (d < 0.7) tmp.copy(dark);
         else tmp.copy(rock);
-        // 根据高度亮暗
         tmp.offsetHSL(0, 0, (h / peak) * 0.06);
-        colors[i * 3] = tmp.r;
-        colors[i * 3 + 1] = tmp.g;
-        colors[i * 3 + 2] = tmp.b;
+        colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
       }
       geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
       geo.computeVertexNormals();
-
-      const mesh = new THREE.Mesh(
-        geo,
-        new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.0 })
-      );
+      const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
       mesh.position.set(cx, 0, cz);
-      mesh.receiveShadow = true;
-      mesh.castShadow = true;
+      mesh.receiveShadow = true; mesh.castShadow = true;
       return mesh;
     }
-
-    const islands = [];
     for (let i = 0; i < 10; i++) {
       const a = i * 2.399 + 0.5;
-      const r = 300 + i * 90;
-      const x = Math.cos(a) * r;
-      const z = Math.sin(a) * r;
-      const radius = 90 + seededRand(i + 1) * 160;
-      const peak = 40 + seededRand(i + 7) * 70;
-      const island = createIsland(x, z, radius, peak);
-      scene.add(island);
-      islands.push(island);
+      scene.add(createIsland(Math.cos(a) * (300 + i * 90), Math.sin(a) * (300 + i * 90), 90 + seededRand(i + 1) * 160, 40 + seededRand(i + 7) * 70));
     }
 
-    // ---------- 云朵 ----------
+    // ================= 云朵 =================
     const cloudTexture = makeGlowTexture('#ffffff', '#cfe4f5');
-    function makeCloud(x, y, z, scale, puffCount) {
-      const group = new THREE.Group();
-      const mat = new THREE.SpriteMaterial({
-        map: cloudTexture, depthWrite: false, transparent: true, fog: true, opacity: 0.92,
-      });
-      for (let i = 0; i < puffCount; i++) {
+    function makeCloud(x, y, z, scale, puffs) {
+      const g = new THREE.Group();
+      const mat = new THREE.SpriteMaterial({ map: cloudTexture, depthWrite: false, transparent: true, opacity: 0.9 });
+      for (let i = 0; i < puffs; i++) {
         const s = new THREE.Sprite(mat);
-        const ox = (seededRand(i * 3 + x * 7) - 0.5) * scale * 1.6;
-        const oy = (seededRand(i * 5 + 2) - 0.5) * scale * 0.55;
-        const oz = (seededRand(i * 7 + 5) - 0.5) * scale * 1.6;
+        s.position.set((seededRand(i * 3 + x * 7) - 0.5) * scale * 1.6, (seededRand(i * 5 + 2) - 0.5) * scale * 0.55, (seededRand(i * 7 + 5) - 0.5) * scale * 1.6);
         const ps = scale * (0.55 + seededRand(i * 11) * 0.7);
-        s.position.set(ox, oy, oz);
         s.scale.set(ps, ps, 1);
-        group.add(s);
+        g.add(s);
       }
-      group.position.set(x, y, z);
-      return group;
+      g.position.set(x, y, z);
+      return g;
     }
-
     const clouds = [];
-    for (let i = 0; i < 90; i++) {
-      const a = seededRand(i + 3) * Math.PI * 2;
-      const r = 200 + seededRand(i + 9) * 1300;
-      const x = Math.cos(a) * r;
-      const z = Math.sin(a) * r;
-      const y = 130 + seededRand(i + 5) * 260;
-      const scale = 24 + seededRand(i + 13) * 46;
-      const cloud = makeCloud(x, y, z, scale, 3 + Math.floor(seededRand(i) * 5));
-      scene.add(cloud);
-      clouds.push(cloud);
+    for (let i = 0; i < 70; i++) {
+      const a = seededRand(i + 3) * Math.PI * 2, r = 200 + seededRand(i + 9) * 1300;
+      const cloud = makeCloud(Math.cos(a) * r, 130 + seededRand(i + 5) * 260, Math.sin(a) * r, 24 + seededRand(i + 13) * 46, 3 + Math.floor(seededRand(i) * 5));
+      scene.add(cloud); clouds.push(cloud);
     }
 
-    // ---------- 飞机模型 ----------
-    const plane = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe8eef4, roughness: 0.35, metalness: 0.15 });
-    const accentMat = new THREE.MeshStandardMaterial({ color: 0xd23a3a, roughness: 0.4, metalness: 0.1 });
-    const darkMat = new THREE.MeshStandardMaterial({ color: 0x24303d, roughness: 0.4, metalness: 0.2 });
+    // ================= 飞机模型工厂 =================
+    function buildAirplane(bodyColor, accentColor) {
+      const g = new THREE.Group();
+      const body = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.35, metalness: 0.15 });
+      const accent = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.4, metalness: 0.1 });
+      const dark = new THREE.MeshStandardMaterial({ color: 0x24303d, roughness: 0.4, metalness: 0.2 });
 
-    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.42, 3.6, 16), bodyMat);
-    fuselage.geometry.rotateX(Math.PI / 2);
-    fuselage.castShadow = true;
-    plane.add(fuselage);
+      const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.42, 3.6, 16), body);
+      fuselage.geometry.rotateX(Math.PI / 2); fuselage.castShadow = true; g.add(fuselage);
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.9, 16), dark);
+      nose.geometry.rotateX(Math.PI / 2); nose.position.z = -2.2; nose.castShadow = true; g.add(nose);
+      const wings = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.12, 1.2), accent);
+      wings.position.set(0, 0.05, 0.3); wings.castShadow = true; g.add(wings);
+      const tailH = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 0.6), accent);
+      tailH.position.set(0, 0.1, 1.7); tailH.castShadow = true; g.add(tailH);
+      const tailV = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.9, 0.7), accent);
+      tailV.position.set(0, 0.55, 1.7); tailV.castShadow = true; g.add(tailV);
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.5), body);
+      fin.position.set(0, 0.15, -1.6); g.add(fin);
 
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.9, 16), darkMat);
-    nose.geometry.rotateX(Math.PI / 2);
-    nose.position.z = -2.2;
-    nose.castShadow = true;
-    plane.add(nose);
+      const prop = new THREE.Group();
+      prop.add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.2, 10), dark));
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.04), dark);
+      prop.add(blade); prop.position.z = -2.7; g.add(prop);
+      return { group: g, prop };
+    }
+    const player = buildAirplane(0xe8eef4, 0xd23a3a);
+    player.group.position.set(0, 160, 0);
+    scene.add(player.group);
 
-    const wings = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.12, 1.2), accentMat);
-    wings.position.z = 0.3;
-    wings.position.y = 0.05;
-    wings.castShadow = true;
-    plane.add(wings);
+    // ================= 游戏对象池 =================
+    const mountains = [], enemies = [], coins = [], bullets = [];
+    const coinGeo = new THREE.CylinderGeometry(1.1, 1.1, 0.18, 20);
+    const coinMat = new THREE.MeshStandardMaterial({ color: 0xffd24a, roughness: 0.25, metalness: 0.85 });
 
-    const tailH = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 0.6), accentMat);
-    tailH.position.set(0, 0.1, 1.7);
-    tailH.castShadow = true;
-    plane.add(tailH);
+    function removeBullet(i) { scene.remove(bullets[i].mesh); bullets.splice(i, 1); }
+    function removeCoin(i) { scene.remove(coins[i].mesh); coins.splice(i, 1); }
+    function removeMountain(i) { const m = mountains[i]; scene.remove(m.mesh); disposeMesh(m.mesh); mountains.splice(i, 1); }
+    function removeEnemy(i) { const e = enemies[i]; scene.remove(e.group); disposeGroup(e.group); enemies.splice(i, 1); }
 
-    const tailV = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.9, 0.7), accentMat);
-    tailV.position.set(0, 0.55, 1.7);
-    tailV.castShadow = true;
-    plane.add(tailV);
+    function spawnMountain(x, y, z, radius, height) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color().setHSL(0.09 + rand(0.03), 0.18, 0.32 + rand(0.1)),
+        roughness: 0.95, flatShading: true,
+      });
+      const mesh = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 7), mat);
+      mesh.position.set(x, height / 2, z);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      scene.add(mesh);
+      mountains.push({ mesh, radius, height, x, z });
+    }
 
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.5), bodyMat);
-    fin.position.set(0, 0.15, -1.6);
-    plane.add(fin);
+    function spawnCoinGroup(cx, cy, cz, n) {
+      for (let i = 0; i < n; i++) {
+        const coin = new THREE.Mesh(coinGeo, coinMat);
+        coin.position.set(cx - (n - 1) * 6 / 2 + i * 6, cy, cz);
+        coin.castShadow = true;
+        scene.add(coin);
+        coins.push({ mesh: coin, r: 6 });
+      }
+    }
 
-    // 螺旋桨
-    const prop = new THREE.Group();
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.2, 10), darkMat);
-    hub.geometry.rotateX(Math.PI / 2);
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.04), darkMat);
-    prop.add(hub);
-    prop.add(blade);
-    prop.position.z = -2.7;
-    plane.add(prop);
+    function spawnEnemy(x, y, z) {
+      const e = buildAirplane(0x3a4a58, 0xff7a2a);
+      e.group.position.set(x, y, z);
+      e.group.scale.setScalar(0.8);
+      scene.add(e.group);
+      enemies.push({ group: e.group, prop: e.prop, speed: rand(28, 40), r: 8, hp: 1 });
+    }
 
-    plane.position.set(0, 160, 0);
-    scene.add(plane);
-
-    // ---------- 飞行参数 ----------
+    // ================= 飞行状态 =================
     const state = {
-      speed: 55,
-      cruiseSpeed: 55,
-      boostSpeed: 110,
-      mouseX: 0,
-      mouseY: 0,
-      boosting: false,
-      yaw: 0,
-      pitch: 0,
-      roll: 0,
+      speed: 55, cruiseSpeed: 55, boostSpeed: 110,
+      yaw: 0, pitch: 0, roll: 0,
+      boosting: false, firing: false, fireCooldown: 0,
+      mouseX: 0, mouseY: 0,
+      lives: 3, score: 0, coinCount: 0, invuln: 0,
     };
-    const MAX_YAW = 0.9;
-    const MAX_PITCH = 0.65;
+    const MAX_YAW = 0.9, MAX_PITCH = 0.65;
+    let started = false, gameOver = false;
+    let spawnAccum = 0;
 
-    // ---------- 输入 ----------
-    function handlePointer(x, y) {
-      state.mouseX = THREE.MathUtils.clamp(x, -1, 1);
-      state.mouseY = THREE.MathUtils.clamp(y, -1, 1);
+    // 前进方向（-Z 为机头）
+    const dir = new THREE.Vector3(0, 0, -1);
+    const fwdH = new THREE.Vector3(), rightV = new THREE.Vector3();
+
+    // ================= 重力感应 =================
+    const gyro = { available: false, beta: 0, gamma: 0, neutralBeta: null };
+    function enableGyro() {
+      window.addEventListener('deviceorientation', (e) => {
+        if (e.gamma == null && e.beta == null) return;
+        gyro.available = true;
+        gyro.beta = e.beta || 0;
+        gyro.gamma = e.gamma || 0;
+        if (gyro.neutralBeta == null) gyro.neutralBeta = gyro.beta;
+      });
     }
-    window.addEventListener('mousemove', (e) => {
-      const nx = (e.clientX / window.innerWidth) * 2 - 1;
-      const ny = (e.clientY / window.innerHeight) * 2 - 1;
-      handlePointer(nx, ny);
-    });
+
+    // ================= 输入 =================
+    const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    const controlsEl = document.getElementById('controls');
+    if (isTouch) controlsEl.classList.remove('hidden');
+
+    function setPointer(x, y) { state.mouseX = clamp(x, -1, 1); state.mouseY = clamp(y, -1, 1); }
+    window.addEventListener('mousemove', (e) => setPointer((e.clientX / innerWidth) * 2 - 1, (e.clientY / innerHeight) * 2 - 1));
+    window.addEventListener('mouseleave', () => { state.mouseX = 0; state.mouseY = 0; });
     window.addEventListener('touchmove', (e) => {
-      if (e.touches.length) {
+      if (!gyro.available && e.touches.length) {
         const t = e.touches[0];
-        handlePointer(
-          (t.clientX / window.innerWidth) * 2 - 1,
-          (t.clientY / window.innerHeight) * 2 - 1
-        );
+        setPointer((t.clientX / innerWidth) * 2 - 1, (t.clientY / innerHeight) * 2 - 1);
       }
     }, { passive: true });
-    window.addEventListener('mouseleave', () => { state.mouseX = 0; state.mouseY = 0; });
 
-    window.addEventListener('mousedown', () => { state.boosting = true; });
-    window.addEventListener('mouseup', () => { state.boosting = false; });
-    window.addEventListener('touchstart', () => { state.boosting = true; });
-    window.addEventListener('touchend', () => { state.boosting = false; });
-
-    // 键盘备用
     const keys = {};
-    window.addEventListener('keydown', (e) => { keys[e.code] = true; if (e.code === 'Space') state.boosting = true; });
-    window.addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'Space') state.boosting = false; });
-
-    // ---------- 自适应 ----------
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+    window.addEventListener('keydown', (e) => {
+      keys[e.code] = true;
+      if (e.code === 'Space') { state.firing = true; e.preventDefault(); }
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') state.boosting = true;
+    });
+    window.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+      if (e.code === 'Space') state.firing = false;
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') state.boosting = false;
     });
 
-    // ---------- 主循环 ----------
+    // 触控屏幕按钮
+    function bindHold(el, onDown, onUp) {
+      el.addEventListener('pointerdown', (e) => { e.preventDefault(); onDown(); el.classList.add('on'); });
+      el.addEventListener('pointerup', () => { onUp(); el.classList.remove('on'); });
+      el.addEventListener('pointercancel', () => { onUp(); el.classList.remove('on'); });
+      el.addEventListener('pointerleave', () => { onUp(); el.classList.remove('on'); });
+    }
+    bindHold(document.getElementById('fireBtn'), () => { state.firing = true; }, () => { state.firing = false; });
+    bindHold(document.getElementById('boostBtn'), () => { state.boosting = true; }, () => { state.boosting = false; });
+
+    // ================= 音频 =================
+    const AudioSys = {
+      ctx: null, master: null, musicGain: null, sfxGain: null, engineOsc: null, engineGain: null,
+      muted: false, chordIdx: 0, musicTimer: null,
+      init() {
+        if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        this.ctx = new Ctx();
+        this.master = this.ctx.createGain(); this.master.gain.value = 0.9; this.master.connect(this.ctx.destination);
+        this.sfxGain = this.ctx.createGain(); this.sfxGain.connect(this.master);
+        this.musicGain = this.ctx.createGain(); this.musicGain.gain.value = 0.2; this.musicGain.connect(this.master);
+
+        this.engineOsc = this.ctx.createOscillator(); this.engineOsc.type = 'sawtooth'; this.engineOsc.frequency.value = 60;
+        const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 200;
+        this.engineGain = this.ctx.createGain(); this.engineGain.gain.value = 0.035;
+        this.engineOsc.connect(lp); lp.connect(this.engineGain); this.engineGain.connect(this.master);
+        this.engineOsc.start();
+        this.startMusic();
+      },
+      startMusic() {
+        const chords = [
+          [130.81, 164.81, 196.0, 261.63, 329.63],
+          [110.0, 130.81, 164.81, 220.0, 261.63],
+          [87.31, 130.81, 174.61, 220.0, 261.63],
+          [98.0, 146.83, 196.0, 246.94, 293.66],
+        ];
+        const play = () => {
+          const chord = chords[this.chordIdx % chords.length];
+          this.chordIdx++;
+          const t = this.ctx.currentTime, dur = 4.0;
+          chord.forEach((f, i) => {
+            const o = this.ctx.createOscillator(); o.type = i === 0 ? 'sine' : 'triangle'; o.frequency.value = f;
+            const g = this.ctx.createGain();
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(0.55 / chord.length, t + 1.4);
+            g.gain.setValueAtTime(0.55 / chord.length, t + dur - 1.6);
+            g.gain.linearRampToValueAtTime(0.0001, t + dur);
+            o.connect(g); g.connect(this.musicGain);
+            o.start(t); o.stop(t + dur + 0.05);
+          });
+        };
+        play();
+        this.musicTimer = setInterval(play, 4000);
+      },
+      setEngine(v) { if (this.engineOsc) this.engineOsc.frequency.value = 45 + clamp(v, 0, 130) * 1.1; },
+      setMuted(m) { this.muted = m; if (this.master) this.master.gain.value = m ? 0 : 0.9; },
+      sfxShoot() {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const o = this.ctx.createOscillator(); o.type = 'square';
+        o.frequency.setValueAtTime(820, t); o.frequency.exponentialRampToValueAtTime(190, t + 0.11);
+        const g = this.ctx.createGain(); g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+        o.connect(g); g.connect(this.sfxGain); o.start(t); o.stop(t + 0.14);
+      },
+      sfxCoin() {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        [880, 1318.5].forEach((f, i) => {
+          const o = this.ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+          const g = this.ctx.createGain(); const st = t + i * 0.07;
+          g.gain.setValueAtTime(0.0001, st); g.gain.exponentialRampToValueAtTime(0.3, st + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, st + 0.28);
+          o.connect(g); g.connect(this.sfxGain); o.start(st); o.stop(st + 0.3);
+        });
+      },
+      sfxExplosion() {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime, dur = 0.5;
+        const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * dur, this.ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+        const src = this.ctx.createBufferSource(); src.buffer = buf;
+        const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(1100, t); lp.frequency.exponentialRampToValueAtTime(140, t + dur);
+        const g = this.ctx.createGain(); g.gain.setValueAtTime(0.6, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        src.connect(lp); lp.connect(g); g.connect(this.sfxGain); src.start(t); src.stop(t + dur);
+      },
+      sfxHit() {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime, dur = 0.4;
+        const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * dur, this.ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+        const src = this.ctx.createBufferSource(); src.buffer = buf;
+        const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 320;
+        const g = this.ctx.createGain(); g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        src.connect(lp); lp.connect(g); g.connect(this.sfxGain); src.start(t); src.stop(t + dur);
+      },
+    };
+
+    // ================= 生成逻辑 =================
+    function computeFwdRight() {
+      fwdH.set(dir.x, 0, dir.z); if (fwdH.lengthSq() < 1e-6) fwdH.set(0, 0, -1); fwdH.normalize();
+      rightV.set(-fwdH.z, 0, fwdH.x);
+    }
+    function spawnBatch() {
+      computeFwdRight();
+      const ahead = 460;
+      const base = player.group.position.clone().addScaledVector(fwdH, ahead);
+      // 两侧山脉（留出中间通道）
+      if (Math.random() < 0.8) {
+        const off = rand(70, 150) * (Math.random() < 0.5 ? 1 : -1);
+        spawnMountain(base.x + rightV.x * off, base.y, base.z + rightV.z * off, rand(20, 46), rand(45, 120));
+      }
+      if (Math.random() < 0.8) {
+        const off = -rand(70, 150) * (Math.random() < 0.5 ? 1 : -1);
+        spawnMountain(base.x + rightV.x * off, base.y, base.z + rightV.z * off, rand(20, 46), rand(45, 120));
+      }
+      // 少量正面山脉需躲避
+      if (Math.random() < 0.35) {
+        spawnMountain(base.x + fwdH.x * 40, base.y, base.z + fwdH.z * 40, rand(18, 34), rand(60, 130));
+      }
+      // 金币队列
+      if (Math.random() < 0.5) {
+        spawnCoinGroup(base.x + fwdH.x * 20, clamp(player.group.position.y, 40, 130), base.z + fwdH.z * 20, 6);
+      }
+      // 敌机
+      if (Math.random() < 0.4) {
+        const lat = rand(-60, 60);
+        spawnEnemy(base.x + rightV.x * lat, clamp(player.group.position.y + rand(-15, 15), 40, 130), base.z + rightV.z * lat);
+      }
+    }
+    function recycleClouds() {
+      for (const c of clouds) {
+        if (c.position.distanceTo(player.group.position) > 1100) {
+          computeFwdRight();
+          c.position.copy(player.group.position).addScaledVector(fwdH, rand(500, 700));
+          c.position.y = rand(130, 360);
+          c.position.addScaledVector(rightV, rand(-220, 220));
+        }
+      }
+    }
+
+    // ================= 武器 =================
+    const bulletGeo = new THREE.SphereGeometry(0.35, 8, 8);
+    const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffe066 });
+    function fire() {
+      const b = new THREE.Mesh(bulletGeo, bulletMat);
+      b.position.copy(player.group.position).addScaledVector(dir, 3);
+      scene.add(b);
+      bullets.push({ mesh: b, vel: dir.clone().multiplyScalar(state.speed + 150), life: 3 });
+      AudioSys.sfxShoot();
+    }
+
+    // ================= 碰撞 / 伤害 =================
+    function damagePlayer() {
+      if (state.invuln > 0 || gameOver) return;
+      state.lives--;
+      state.invuln = 1.6;
+      AudioSys.sfxHit();
+      const flash = document.getElementById('damageFlash');
+      flash.classList.add('on');
+      setTimeout(() => flash.classList.remove('on'), 120);
+      if (state.lives <= 0) endGame();
+    }
+    function endGame() {
+      gameOver = true;
+      state.firing = false; state.boosting = false;
+      document.getElementById('finalScore').textContent = state.score;
+      document.getElementById('gameOverOverlay').classList.remove('hidden');
+    }
+
+    // ================= HUD 更新 =================
+    const el = {
+      score: document.getElementById('score'), coins: document.getElementById('coins'),
+      hearts: document.getElementById('hearts'), speed: document.getElementById('speed'), alt: document.getElementById('alt'),
+    };
+    function updateHUD() {
+      el.score.textContent = state.score;
+      el.coins.textContent = state.coinCount;
+      el.hearts.textContent = '❤'.repeat(Math.max(0, state.lives)) + '🖤'.repeat(Math.max(0, 3 - state.lives));
+      el.speed.textContent = Math.round(state.speed * 3.6);
+      el.alt.textContent = Math.round(player.group.position.y);
+    }
+
+    // ================= 主循环 =================
     const clock = new THREE.Clock();
-    const speedEl = document.getElementById('speed');
-    const altEl = document.getElementById('alt');
-    const tmpV = new THREE.Vector3();
-    const tmpV2 = new THREE.Vector3();
+    const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
 
     function animate() {
       const dt = Math.min(clock.getDelta(), 0.05);
-
-      // 键盘输入叠加
-      let mx = state.mouseX;
-      let my = state.mouseY;
-      if (keys['ArrowLeft'] || keys['KeyA']) mx -= 1;
-      if (keys['ArrowRight'] || keys['KeyD']) mx += 1;
-      if (keys['ArrowUp'] || keys['KeyW']) my += 1;
-      if (keys['ArrowDown'] || keys['KeyS']) my -= 1;
-      mx = THREE.MathUtils.clamp(mx, -1, 1);
-      my = THREE.MathUtils.clamp(my, -1, 1);
-
-      const targetYaw = mx * MAX_YAW;
-      const targetPitch = my * MAX_PITCH;
-      state.yaw = THREE.MathUtils.lerp(state.yaw, targetYaw, 1 - Math.pow(0.001, dt));
-      state.pitch = THREE.MathUtils.lerp(state.pitch, targetPitch, 1 - Math.pow(0.001, dt));
-
-      // 速度平滑
-      const targetSpeed = state.boosting ? state.boostSpeed : state.cruiseSpeed;
-      state.speed = THREE.MathUtils.lerp(state.speed, targetSpeed, 1 - Math.pow(0.02, dt));
-
-      // 前进方向（-Z 为机头）
-      const cp = Math.cos(state.pitch);
-      const dir = tmpV.set(
-        -Math.sin(state.yaw) * cp,
-        Math.sin(state.pitch),
-        -Math.cos(state.yaw) * cp
-      ).normalize();
-
-      plane.position.addScaledVector(dir, state.speed * dt);
-
-      // 机体朝向：偏航 + 俯仰，并带倾斜（压坡度）
-      state.roll = THREE.MathUtils.lerp(state.roll, -mx * 0.7, 1 - Math.pow(0.001, dt));
-      plane.rotation.set(state.pitch, state.yaw, state.roll);
-
-      // 高度护栏（避免沉入水面）
-      if (plane.position.y < 8) {
-        plane.position.y = 8;
-        state.pitch = Math.max(state.pitch, 0);
-      }
-
-      // 螺旋桨旋转
-      prop.rotation.z += state.speed * dt * 1.4;
-
-      // 云朵缓缓漂移
       const t = clock.elapsedTime;
-      for (let i = 0; i < clouds.length; i++) {
-        clouds[i].rotation.y += dt * 0.004;
+
+      if (started && !gameOver) {
+        // 转向输入
+        let mx = state.mouseX, my = state.mouseY;
+        if (gyro.available) {
+          const nb = gyro.neutralBeta == null ? gyro.beta : gyro.neutralBeta;
+          mx = clamp(gyro.gamma / 28, -1, 1);
+          my = clamp((gyro.beta - nb) / 30, -1, 1);
+        } else {
+          if (keys['ArrowLeft'] || keys['KeyA']) mx -= 1;
+          if (keys['ArrowRight'] || keys['KeyD']) mx += 1;
+          if (keys['ArrowUp'] || keys['KeyW']) my += 1;
+          if (keys['ArrowDown'] || keys['KeyS']) my -= 1;
+          mx = clamp(mx, -1, 1); my = clamp(my, -1, 1);
+        }
+
+        state.yaw = THREE.MathUtils.lerp(state.yaw, mx * MAX_YAW, 1 - Math.pow(0.001, dt));
+        state.pitch = THREE.MathUtils.lerp(state.pitch, my * MAX_PITCH, 1 - Math.pow(0.001, dt));
+        const targetSpeed = state.boosting ? state.boostSpeed : state.cruiseSpeed;
+        state.speed = THREE.MathUtils.lerp(state.speed, targetSpeed, 1 - Math.pow(0.02, dt));
+
+        const cp = Math.cos(state.pitch);
+        dir.set(-Math.sin(state.yaw) * cp, Math.sin(state.pitch), -Math.cos(state.yaw) * cp).normalize();
+        player.group.position.addScaledVector(dir, state.speed * dt);
+        state.roll = THREE.MathUtils.lerp(state.roll, -mx * 0.7, 1 - Math.pow(0.001, dt));
+        player.group.rotation.set(state.pitch, state.yaw, state.roll);
+
+        if (player.group.position.y < 7) { player.group.position.y = 7; state.pitch = Math.max(state.pitch, 0); }
+        state.invuln = Math.max(0, state.invuln - dt);
+        player.group.visible = Math.floor(state.invuln * 12) % 2 === 0 || state.invuln <= 0;
+
+        // 开火
+        state.fireCooldown -= dt;
+        if (state.firing && state.fireCooldown <= 0) { fire(); state.fireCooldown = 0.18; }
+
+        // 生成
+        spawnAccum += state.speed * dt;
+        if (spawnAccum > 130) { spawnAccum = 0; spawnBatch(); }
       }
+
+      // 螺旋桨
+      player.prop.rotation.z += state.speed * dt * 1.5;
+
+      // 子弹
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.mesh.position.addScaledVector(b.vel, dt); b.life -= dt;
+        if (b.life <= 0) removeBullet(i);
+      }
+
+      // 山脉碰撞
+      for (let i = mountains.length - 1; i >= 0; i--) {
+        const m = mountains[i];
+        const dx = player.group.position.x - m.x, dz = player.group.position.z - m.z;
+        const hd = Math.sqrt(dx * dx + dz * dz);
+        if (started && !gameOver && hd < m.radius * 0.6 && player.group.position.y < m.height * 0.95) {
+          damagePlayer();
+          player.group.position.y = Math.max(player.group.position.y, m.height * 0.95 + 1);
+        }
+        if (player.group.position.distanceToSquared(tmpA.set(m.x, m.height / 2, m.z)) > 900 * 900) {
+          removeMountain(i);
+        }
+      }
+
+      // 金币
+      for (let i = coins.length - 1; i >= 0; i--) {
+        const c = coins[i];
+        c.mesh.rotation.y += dt * 3;
+        const d = c.mesh.position.distanceTo(player.group.position);
+        if (started && !gameOver && d < c.r + 4) {
+          removeCoin(i);
+          state.coinCount++; state.score += 10; AudioSys.sfxCoin();
+          continue;
+        }
+        if (d > 900) removeCoin(i);
+      }
+
+      // 敌机
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        const dist = e.group.position.distanceTo(player.group.position);
+        let removed = false;
+
+        if (started && !gameOver) {
+          if (dist < 120) {
+            const toP = tmpA.copy(player.group.position).sub(e.group.position).normalize();
+            e.group.position.addScaledVector(toP, e.speed * dt);
+            e.group.rotation.y = Math.atan2(-toP.x, -toP.z);
+            e.prop.rotation.z += dt * 30;
+          }
+          // 敌机撞玩家
+          if (dist < e.r + 5) {
+            damagePlayer();
+            removeEnemy(i);
+            removed = true;
+          } else {
+            // 子弹击中敌机
+            for (let j = bullets.length - 1; j >= 0; j--) {
+              if (bullets[j].mesh.position.distanceTo(e.group.position) < e.r + 2) {
+                removeBullet(j);
+                removeEnemy(i);
+                state.score += 50; AudioSys.sfxExplosion();
+                removed = true;
+                break;
+              }
+            }
+          }
+        }
+        if (!removed && dist > 900) removeEnemy(i);
+      }
+
+      // 云朵漂移与回收
+      for (const c of clouds) c.rotation.y += dt * 0.004;
+      recycleClouds();
 
       // 海面微浪
       const wpos = waterGeo.attributes.position;
       for (let i = 0; i < wpos.count; i++) {
-        const x = wpos.getX(i);
-        const z = wpos.getZ(i);
+        const x = wpos.getX(i), z = wpos.getZ(i);
         wpos.setY(i, Math.sin(x * 0.06 + t * 0.6) * 0.5 + Math.cos(z * 0.05 + t * 0.5) * 0.5);
       }
       wpos.needsUpdate = true;
       waterGeo.computeVertexNormals();
 
-      // 相机跟随
-      const camOffset = tmpV2.copy(dir).multiplyScalar(-13).add(new THREE.Vector3(0, 3.4, 0));
-      camera.position.lerp(
-        plane.position.clone().add(camOffset),
-        1 - Math.pow(0.0005, dt)
-      );
-      const lookTarget = plane.position.clone().addScaledVector(dir, 26);
-      camera.lookAt(lookTarget);
+      // 世界跟随
+      water.position.set(player.group.position.x, 0, player.group.position.z);
+      sky.position.set(player.group.position.x, player.group.position.y - 40, player.group.position.z);
+      sunLight.position.set(player.group.position.x + 300, player.group.position.y + 520, player.group.position.z - 180);
+      sunLight.target.position.copy(player.group.position);
 
-      // HUD
-      speedEl.textContent = Math.round(state.speed * 3.6); // 转成 km/h 观感
-      altEl.textContent = Math.round(plane.position.y);
+      // 相机
+      const camOffset = tmpB.copy(dir).multiplyScalar(-13).add(new THREE.Vector3(0, 3.4, 0));
+      camera.position.lerp(player.group.position.clone().add(camOffset), 1 - Math.pow(0.0005, dt));
+      camera.lookAt(player.group.position.clone().addScaledVector(dir, 26));
 
+      AudioSys.setEngine(state.speed);
+      updateHUD();
       renderer.render(scene, camera);
       requestAnimationFrame(animate);
     }
     animate();
+
+    // ================= UI 事件 =================
+    function beginGame() {
+      if (started) return;
+      AudioSys.init();
+      document.getElementById('startOverlay').classList.add('hidden');
+      started = true;
+      // iOS 需要请求权限
+      if (typeof DeviceOrientationEvent !== 'undefined') {
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+          DeviceOrientationEvent.requestPermission().then(() => enableGyro()).catch(() => {});
+        } else {
+          enableGyro();
+        }
+      }
+      if (isTouch) {
+        document.getElementById('hint').textContent = '倾斜手机转向 · 按钮开火/加速';
+      } else {
+        document.getElementById('hint').textContent = '移动鼠标转向 · 空格开火 · Shift加速';
+      }
+    }
+    document.getElementById('startBtn').addEventListener('click', beginGame);
+    document.getElementById('startOverlay').addEventListener('touchend', (e) => { if (started) return; e.preventDefault(); beginGame(); });
+    document.getElementById('muteBtn').addEventListener('click', () => {
+      AudioSys.setMuted(!AudioSys.muted);
+      document.getElementById('muteBtn').textContent = AudioSys.muted ? '✕' : '♪';
+    });
+    document.getElementById('restartBtn').addEventListener('click', () => {
+      // 清空对象池
+      while (mountains.length) removeMountain(mountains.length - 1);
+      while (enemies.length) removeEnemy(enemies.length - 1);
+      while (coins.length) removeCoin(coins.length - 1);
+      while (bullets.length) removeBullet(bullets.length - 1);
+      state.lives = 3; state.score = 0; state.coinCount = 0; state.invuln = 0;
+      state.yaw = 0; state.pitch = 0; state.roll = 0;
+      player.group.position.set(0, 160, 0); player.group.rotation.set(0, 0, 0);
+      player.group.visible = true;
+      spawnAccum = 0; gameOver = false;
+      document.getElementById('gameOverOverlay').classList.add('hidden');
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
   </script>
 </body>
 </html>
