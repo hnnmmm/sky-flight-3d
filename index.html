@@ -88,7 +88,12 @@
     .btn span { display: block; font-size: 9px; font-weight: 500; opacity: 0.6; letter-spacing: 0.2em; }
     .btn.fire { left: 22px; bottom: 110px; background: rgba(180,40,40,0.32); }
     .btn.boost { right: 22px; bottom: 110px; background: rgba(20,140,90,0.30); }
+    .btn.reset {
+      left: 50%; bottom: 110px; width: 72px; height: 72px; font-size: 12px;
+      transform: translateX(-50%); background: rgba(40,85,170,0.35);
+    }
     .btn:active { transform: scale(0.92); }
+    .btn.reset:active { transform: translateX(-50%) scale(0.92); }
     .btn.on { background: rgba(255,255,255,0.28); }
 
     /* ---- 覆盖层 ---- */
@@ -142,6 +147,7 @@
   <div class="controls hidden" id="controls">
     <button class="btn fire" id="fireBtn">开火<span>FIRE</span></button>
     <button class="btn boost" id="boostBtn">加速<span>BOOST</span></button>
+    <button class="btn reset" id="resetBtn">重置方向<span>RESET</span></button>
   </div>
 
   <div class="damage-flash" id="damageFlash"></div>
@@ -150,6 +156,7 @@
     <h2>SKY FLIGHT 3D</h2>
     <div class="sub">
       驾驶战机穿越云海，躲避山脉、击落敌机、收集金币。<br />
+      转动手机即可让机头 360° 跟随指向；点「重置方向」设定直飞。<br />
       首次点击将开启声音与重力感应。
     </div>
     <button class="cta" id="startBtn">点击开始</button>
@@ -412,6 +419,8 @@
       lives: 3, score: 0, coinCount: 0, invuln: 0,
     };
     const MAX_YAW_RATE = 1.7, MAX_PITCH_RATE = 1.3, MAX_PITCH_ANGLE = 1.15;
+    const MAX_YAW_ANGLE = Math.PI;          // 水平航向最大偏移（支持回头，360° 环绕）
+    const YAW_DEADZONE = 3, PITCH_DEADZONE = 3; // 直飞死区（度）：阈值内保持直飞
     const PLAYER_RADIUS = 2.6;
     let started = false, gameOver = false;
     let spawnAccum = 0;
@@ -420,27 +429,32 @@
     const dir = new THREE.Vector3(0, 0, -1);
     const fwdH = new THREE.Vector3(), rightV = new THREE.Vector3();
 
-    // ================= 重力感应 =================
-    const gyro = { available: false, beta: 0, gamma: 0, neutralBeta: null, neutralGamma: null, frames: 0, sGamma: 0, sBeta: 0, init: false };
+    // ================= 重力感应（方向跟随）=================
+    const gyro = { available: false, beta: 0, gamma: 0, alpha: 0, baseBeta: 0, baseGamma: 0, baseAlpha: 0, hasAlpha: false, baseSet: false };
+    // 绕竖直轴的 360° 环绕角度差，归一化到 (-180, 180]
+    const angleDiff = (a, b) => (a - b + 540) % 360 - 180;
     function enableGyro() {
       window.addEventListener('deviceorientation', (e) => {
         if (e.gamma == null && e.beta == null) return;
         gyro.available = true;
         gyro.beta = e.beta || 0;
         gyro.gamma = e.gamma || 0;
-        // 用开局前 30 帧均值标定「水平/竖直」基准，消除手持时的自然倾角
-        if (gyro.frames < 30) {
-          gyro.frames++;
-          if (gyro.neutralBeta == null) {
-            gyro.neutralBeta = gyro.beta;
-            gyro.neutralGamma = gyro.gamma;
-          } else {
-            const w = 1 / gyro.frames;
-            gyro.neutralBeta += (gyro.beta - gyro.neutralBeta) * w;
-            gyro.neutralGamma += (gyro.gamma - gyro.neutralGamma) * w;
-          }
+        if (e.alpha != null) { gyro.alpha = e.alpha; gyro.hasAlpha = true; }
+        // 首次读数自动设为「直飞」基准；之后可用「方向重置」按钮重设
+        if (!gyro.baseSet) {
+          gyro.baseSet = true;
+          gyro.baseBeta = gyro.beta;
+          gyro.baseGamma = gyro.gamma;
+          gyro.baseAlpha = gyro.alpha;
         }
       });
+    }
+    // 把当前手机朝向记录为「直飞」基准（360° 全向偏移的原点）
+    function resetDirection() {
+      gyro.baseBeta = gyro.beta;
+      gyro.baseGamma = gyro.gamma;
+      gyro.baseAlpha = gyro.alpha;
+      gyro.baseSet = true;
     }
 
     // ================= 输入 =================
@@ -479,6 +493,15 @@
     }
     bindHold(document.getElementById('fireBtn'), () => { state.firing = true; }, () => { state.firing = false; });
     bindHold(document.getElementById('boostBtn'), () => { state.boosting = true; }, () => { state.boosting = false; });
+
+    // 方向重置：把当前手机朝向设为「直飞」基准
+    const resetBtnEl = document.getElementById('resetBtn');
+    resetBtnEl.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      resetDirection();
+      resetBtnEl.classList.add('on');
+      setTimeout(() => resetBtnEl.classList.remove('on'), 180);
+    });
 
     // ================= 音频 =================
     const AudioSys = {
@@ -669,31 +692,33 @@
       const t = clock.elapsedTime;
 
       if (started && !gameOver) {
-        // 转向输入：-1..1（gyro 用倾斜角，鼠标/键盘叠加持续转向）
-        let mx = state.mouseX, my = state.mouseY;
+        // 方向控制：陀螺仪 = 方向跟随（手机指向哪，机头就飞向哪）；鼠标/键盘 = 持续转向
         if (gyro.available) {
-          const ng = gyro.neutralGamma == null ? gyro.gamma : gyro.neutralGamma;
-          const nb = gyro.neutralBeta == null ? gyro.beta : gyro.neutralBeta;
-          const gx = gyro.gamma - ng;   // 左右侧摆 → 转向
-          const by = gyro.beta - nb;    // 前后抬起/放下 → 俯仰
+          // 相对「直飞基准」的 360° 全向偏移
+          const DEG = Math.PI / 180;
+          let dyaw = gyro.hasAlpha
+            ? angleDiff(gyro.alpha, gyro.baseAlpha) // 绕竖直轴 360° 环绕（度）
+            : gyro.gamma - gyro.baseGamma;          // 无罗盘时回退：左右侧摆（度）
+          let dpitch = gyro.beta - gyro.baseBeta;            // 俯仰：抬起抬头 / 放下低头（度）
 
-          // 首帧对齐，避免初始化跳变
-          if (!gyro.init) { gyro.sGamma = gx; gyro.sBeta = by; gyro.init = true; }
+          // 死区：阈值内保持直飞（阈值适中，太大不灵敏、太小易抖动）
+          if (Math.abs(dyaw) < YAW_DEADZONE) dyaw = 0;
+          else dyaw -= Math.sign(dyaw) * YAW_DEADZONE;
+          if (Math.abs(dpitch) < PITCH_DEADZONE) dpitch = 0;
+          else dpitch -= Math.sign(dpitch) * PITCH_DEADZONE;
 
-          // 低通滤波（tau≈30ms）：滤除传感器高频抖动，快速转动仍紧跟，消除失稳
-          const inputK = 1 - Math.exp(-dt / 0.03);
-          gyro.sGamma = THREE.MathUtils.lerp(gyro.sGamma, gx, inputK);
-          gyro.sBeta = THREE.MathUtils.lerp(gyro.sBeta, by, inputK);
+          // 手机偏多少度，飞机就偏多少度（1:1 方向跟随）
+          const targetYaw = clamp(dyaw * DEG, -MAX_YAW_ANGLE, MAX_YAW_ANGLE);
+          const targetPitch = clamp(dpitch * DEG, -MAX_PITCH_ANGLE, MAX_PITCH_ANGLE);
 
-          let fx = gyro.sGamma, fy = gyro.sBeta;
-          // 极小死区：仅消除静止漂移，不影响快速大角度操控
-          if (Math.abs(fx) < 1.0) fx = 0;
-          if (Math.abs(fy) < 1.0) fy = 0;
-
-          // 约 ±26° 侧摆 / ±28° 俯仰即满舵，实现 360° 全方位连续操控
-          mx = clamp(fx / 26, -1, 1);
-          my = clamp(fy / 28, -1, 1);
+          // 极速逼近目标姿态，机头紧贴手机指向
+          const follow = 1 - Math.exp(-dt / 0.06);
+          state.yaw = THREE.MathUtils.lerp(state.yaw, targetYaw, follow);
+          state.pitch = THREE.MathUtils.lerp(state.pitch, targetPitch, follow);
+          state.roll = THREE.MathUtils.lerp(state.roll, clamp(-dyaw * DEG * 0.6, -0.9, 0.9), follow);
         } else {
+          // 鼠标 / 键盘持续转向（按住持续转，回正/松开才停）
+          let mx = state.mouseX, my = state.mouseY;
           let kx = 0, ky = 0;
           if (keys['ArrowLeft'] || keys['KeyA']) kx -= 1;
           if (keys['ArrowRight'] || keys['KeyD']) kx += 1;
@@ -701,17 +726,15 @@
           if (keys['ArrowDown'] || keys['KeyS']) ky -= 1;
           mx = clamp(mx + kx, -1, 1);
           my = clamp(my + ky, -1, 1);
+          const targetYawRate = mx * MAX_YAW_RATE;
+          const targetPitchRate = my * MAX_PITCH_RATE;
+          const rateK = 1 - Math.exp(-dt / 0.02);
+          state.yawRate = THREE.MathUtils.lerp(state.yawRate, targetYawRate, rateK);
+          state.pitchRate = THREE.MathUtils.lerp(state.pitchRate, targetPitchRate, rateK);
+          state.yaw += state.yawRate * dt;
+          state.pitch = clamp(state.pitch + state.pitchRate * dt, -MAX_PITCH_ANGLE, MAX_PITCH_ANGLE);
+          state.roll = THREE.MathUtils.lerp(state.roll, -mx * 0.8, rateK);
         }
-
-        // 输入映射为角速度：保持倾斜/按住 = 持续转向，回正才停止
-        // 极速逼近（tau≈20ms）：近乎 1:1 跟随陀螺仪，快速转动不再滞后失稳
-        const targetYawRate = mx * MAX_YAW_RATE;
-        const targetPitchRate = my * MAX_PITCH_RATE;
-        const rateK = 1 - Math.exp(-dt / 0.02);
-        state.yawRate = THREE.MathUtils.lerp(state.yawRate, targetYawRate, rateK);
-        state.pitchRate = THREE.MathUtils.lerp(state.pitchRate, targetPitchRate, rateK);
-        state.yaw += state.yawRate * dt;
-        state.pitch = clamp(state.pitch + state.pitchRate * dt, -MAX_PITCH_ANGLE, MAX_PITCH_ANGLE);
 
         const targetSpeed = state.boosting ? state.boostSpeed : state.cruiseSpeed;
         state.speed = THREE.MathUtils.lerp(state.speed, targetSpeed, 1 - Math.pow(0.02, dt));
@@ -719,10 +742,6 @@
         const cp = Math.cos(state.pitch);
         dir.set(-Math.sin(state.yaw) * cp, Math.sin(state.pitch), -Math.cos(state.yaw) * cp).normalize();
         player.group.position.addScaledVector(dir, state.speed * dt);
-
-        // 协调转弯：倾角由实际角速度决定，机头与飞行方向始终同步、稳定
-        const bank = clamp(-state.yawRate / MAX_YAW_RATE, -1, 1) * 0.85;
-        state.roll = THREE.MathUtils.lerp(state.roll, bank, rateK);
         player.group.rotation.set(state.pitch, state.yaw, state.roll);
 
         if (player.group.position.y < 7) { player.group.position.y = 7; state.pitch = Math.max(state.pitch, 0); }
@@ -855,7 +874,7 @@
         }
       }
       if (isTouch) {
-        document.getElementById('hint').textContent = '倾斜手机转向 · 按钮开火/加速';
+        document.getElementById('hint').textContent = '转动手机指向方向 · 点「重置方向」设直飞 · 按钮开火/加速';
       } else {
         document.getElementById('hint').textContent = '移动鼠标转向 · 空格开火 · Shift加速';
       }
