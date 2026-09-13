@@ -429,31 +429,41 @@
     const dir = new THREE.Vector3(0, 0, -1);
     const fwdH = new THREE.Vector3(), rightV = new THREE.Vector3();
 
-    // ================= 重力感应（方向跟随）=================
-    const gyro = { available: false, beta: 0, gamma: 0, alpha: 0, baseBeta: 0, baseGamma: 0, baseAlpha: 0, hasAlpha: false, baseSet: false };
-    // 绕竖直轴的 360° 环绕角度差，归一化到 (-180, 180]
-    const angleDiff = (a, b) => (a - b + 540) % 360 - 180;
+    // ================= 重力感应（屏幕指向 = 飞行方向）=================
+    const RAD = Math.PI / 180;
+    const gyro = { available: false, alpha: 0, beta: 0, gamma: 0, baseYaw: 0, basePitch: 0, baseSet: false };
+    // 角度差归一化到 (-π, π]
+    const angleDiffRad = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+    // DeviceOrientationControls 同款：把设备姿态转为四元数（屏幕法线对齐相机 forward）
+    const _gyroEuler = new THREE.Euler();
+    const _gyroQuat = new THREE.Quaternion();
+    const _gyroQ1 = new THREE.Quaternion(-Math.SQRT1_2, 0, 0, Math.SQRT1_2);
+    const _gyroFwd = new THREE.Vector3();
+    // 返回屏幕当前「指向」的水平方位角与仰角（弧度）——屏幕朝哪，机头就朝哪
+    function gyroDirection() {
+      _gyroEuler.set(gyro.beta * RAD, gyro.alpha * RAD, -gyro.gamma * RAD, 'YXZ');
+      _gyroQuat.setFromEuler(_gyroEuler);
+      _gyroQuat.multiply(_gyroQ1);
+      _gyroFwd.set(0, 0, -1).applyQuaternion(_gyroQuat);
+      return {
+        yaw: Math.atan2(-_gyroFwd.x, -_gyroFwd.z),
+        pitch: Math.asin(clamp(_gyroFwd.y, -1, 1)),
+      };
+    }
     function enableGyro() {
       window.addEventListener('deviceorientation', (e) => {
         if (e.gamma == null && e.beta == null) return;
         gyro.available = true;
+        gyro.alpha = e.alpha || 0;
         gyro.beta = e.beta || 0;
         gyro.gamma = e.gamma || 0;
-        if (e.alpha != null) { gyro.alpha = e.alpha; gyro.hasAlpha = true; }
-        // 首次读数自动设为「直飞」基准；之后可用「方向重置」按钮重设
-        if (!gyro.baseSet) {
-          gyro.baseSet = true;
-          gyro.baseBeta = gyro.beta;
-          gyro.baseGamma = gyro.gamma;
-          gyro.baseAlpha = gyro.alpha;
-        }
       });
     }
-    // 把当前手机朝向记录为「直飞」基准（360° 全向偏移的原点）
+    // 把当前屏幕指向记录为「直飞」基准
     function resetDirection() {
-      gyro.baseBeta = gyro.beta;
-      gyro.baseGamma = gyro.gamma;
-      gyro.baseAlpha = gyro.alpha;
+      const d = gyroDirection();
+      gyro.baseYaw = d.yaw;
+      gyro.basePitch = d.pitch;
       gyro.baseSet = true;
     }
 
@@ -694,28 +704,27 @@
       if (started && !gameOver) {
         // 方向控制：陀螺仪 = 方向跟随（手机指向哪，机头就飞向哪）；鼠标/键盘 = 持续转向
         if (gyro.available) {
-          // 相对「直飞基准」的 360° 全向偏移
-          const DEG = Math.PI / 180;
-          let dyaw = gyro.hasAlpha
-            ? angleDiff(gyro.alpha, gyro.baseAlpha) // 绕竖直轴 360° 环绕（度）
-            : gyro.gamma - gyro.baseGamma;          // 无罗盘时回退：左右侧摆（度）
-          let dpitch = gyro.beta - gyro.baseBeta;            // 俯仰：抬起抬头 / 放下低头（度）
+          // 屏幕指向 = 飞行方向：手机屏幕朝哪，机头就朝哪（统一 3D 映射，非单轴）
+          const d = gyroDirection();
+          if (!gyro.baseSet) { gyro.baseYaw = d.yaw; gyro.basePitch = d.pitch; gyro.baseSet = true; }
 
-          // 死区：阈值内保持直飞（阈值适中，太大不灵敏、太小易抖动）
-          if (Math.abs(dyaw) < YAW_DEADZONE) dyaw = 0;
-          else dyaw -= Math.sign(dyaw) * YAW_DEADZONE;
-          if (Math.abs(dpitch) < PITCH_DEADZONE) dpitch = 0;
-          else dpitch -= Math.sign(dpitch) * PITCH_DEADZONE;
+          let dyaw = angleDiffRad(d.yaw, gyro.baseYaw);     // 相对「直飞基准」的水平偏移（弧度）
+          let dpitch = d.pitch - gyro.basePitch;            // 俯仰偏移（弧度）
 
-          // 手机偏多少度，飞机就偏多少度（1:1 方向跟随）
-          const targetYaw = clamp(dyaw * DEG, -MAX_YAW_ANGLE, MAX_YAW_ANGLE);
-          const targetPitch = clamp(dpitch * DEG, -MAX_PITCH_ANGLE, MAX_PITCH_ANGLE);
+          // 死区：阈值内保持直飞（适中，防手抖又不迟钝）
+          const dz = YAW_DEADZONE * RAD;
+          const dzp = PITCH_DEADZONE * RAD;
+          if (Math.abs(dyaw) < dz) dyaw = 0; else dyaw -= Math.sign(dyaw) * dz;
+          if (Math.abs(dpitch) < dzp) dpitch = 0; else dpitch -= Math.sign(dpitch) * dzp;
 
-          // 极速逼近目标姿态，机头紧贴手机指向
+          const targetYaw = clamp(dyaw, -MAX_YAW_ANGLE, MAX_YAW_ANGLE);
+          const targetPitch = clamp(dpitch, -MAX_PITCH_ANGLE, MAX_PITCH_ANGLE);
+
+          // 极速逼近：机头紧贴屏幕指向
           const follow = 1 - Math.exp(-dt / 0.06);
           state.yaw = THREE.MathUtils.lerp(state.yaw, targetYaw, follow);
           state.pitch = THREE.MathUtils.lerp(state.pitch, targetPitch, follow);
-          state.roll = THREE.MathUtils.lerp(state.roll, clamp(-dyaw * DEG * 0.6, -0.9, 0.9), follow);
+          state.roll = THREE.MathUtils.lerp(state.roll, clamp(-dyaw * 0.6, -0.9, 0.9), follow);
         } else {
           // 鼠标 / 键盘持续转向（按住持续转，回正/松开才停）
           let mx = state.mouseX, my = state.mouseY;
