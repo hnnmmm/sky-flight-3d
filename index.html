@@ -364,8 +364,8 @@
 
     // ================= 游戏对象池 =================
     const mountains = [], enemies = [], coins = [], bullets = [];
-    const coinGeo = new THREE.CylinderGeometry(1.1, 1.1, 0.18, 20);
-    const coinMat = new THREE.MeshStandardMaterial({ color: 0xffd24a, roughness: 0.25, metalness: 0.85 });
+    const coinGeo = new THREE.TorusGeometry(1.15, 0.34, 14, 32);
+    const coinMat = new THREE.MeshStandardMaterial({ color: 0xffd24a, roughness: 0.2, metalness: 0.9, emissive: 0x6b4a00, emissiveIntensity: 0.3 });
 
     function removeBullet(i) { scene.remove(bullets[i].mesh); bullets.splice(i, 1); }
     function removeCoin(i) { scene.remove(coins[i].mesh); coins.splice(i, 1); }
@@ -390,7 +390,7 @@
         coin.position.set(cx - (n - 1) * 6 / 2 + i * 6, cy, cz);
         coin.castShadow = true;
         scene.add(coin);
-        coins.push({ mesh: coin, r: 6 });
+        coins.push({ mesh: coin, r: 2.5 });
       }
     }
 
@@ -399,18 +399,20 @@
       e.group.position.set(x, y, z);
       e.group.scale.setScalar(0.8);
       scene.add(e.group);
-      enemies.push({ group: e.group, prop: e.prop, speed: rand(28, 40), r: 8, hp: 1 });
+      enemies.push({ group: e.group, prop: e.prop, speed: rand(28, 40), r: 2.4, hp: 1 });
     }
 
     // ================= 飞行状态 =================
     const state = {
       speed: 55, cruiseSpeed: 55, boostSpeed: 110,
       yaw: 0, pitch: 0, roll: 0,
+      yawRate: 0, pitchRate: 0,
       boosting: false, firing: false, fireCooldown: 0,
       mouseX: 0, mouseY: 0,
       lives: 3, score: 0, coinCount: 0, invuln: 0,
     };
-    const MAX_YAW = 0.9, MAX_PITCH = 0.65;
+    const MAX_YAW_RATE = 1.7, MAX_PITCH_RATE = 1.3, MAX_PITCH_ANGLE = 1.15;
+    const PLAYER_RADIUS = 2.6;
     let started = false, gameOver = false;
     let spawnAccum = 0;
 
@@ -583,10 +585,15 @@
       if (Math.random() < 0.5) {
         spawnCoinGroup(base.x + fwdH.x * 20, clamp(player.group.position.y, 40, 130), base.z + fwdH.z * 20, 6);
       }
-      // 敌机
-      if (Math.random() < 0.4) {
-        const lat = rand(-60, 60);
-        spawnEnemy(base.x + rightV.x * lat, clamp(player.group.position.y + rand(-15, 15), 40, 130), base.z + rightV.z * lat);
+      // 敌机（提高密度，小概率双机编队）
+      if (Math.random() < 0.7) {
+        const lat = rand(-70, 70);
+        const ey = clamp(player.group.position.y + rand(-20, 20), 40, 130);
+        spawnEnemy(base.x + rightV.x * lat, ey, base.z + rightV.z * lat);
+        if (Math.random() < 0.35) {
+          const lat2 = lat + rand(12, 24) * (lat >= 0 ? 1 : -1);
+          spawnEnemy(base.x + rightV.x * lat2, clamp(ey + rand(-15, 20), 40, 130), base.z + rightV.z * lat2);
+        }
       }
     }
     function recycleClouds() {
@@ -651,29 +658,37 @@
       const t = clock.elapsedTime;
 
       if (started && !gameOver) {
-        // 转向输入
+        // 转向输入：-1..1（gyro 用倾斜角，鼠标/键盘叠加持续转向）
         let mx = state.mouseX, my = state.mouseY;
         if (gyro.available) {
           const nb = gyro.neutralBeta == null ? gyro.beta : gyro.neutralBeta;
           mx = clamp(gyro.gamma / 28, -1, 1);
           my = clamp((gyro.beta - nb) / 30, -1, 1);
         } else {
-          if (keys['ArrowLeft'] || keys['KeyA']) mx -= 1;
-          if (keys['ArrowRight'] || keys['KeyD']) mx += 1;
-          if (keys['ArrowUp'] || keys['KeyW']) my += 1;
-          if (keys['ArrowDown'] || keys['KeyS']) my -= 1;
-          mx = clamp(mx, -1, 1); my = clamp(my, -1, 1);
+          let kx = 0, ky = 0;
+          if (keys['ArrowLeft'] || keys['KeyA']) kx -= 1;
+          if (keys['ArrowRight'] || keys['KeyD']) kx += 1;
+          if (keys['ArrowUp'] || keys['KeyW']) ky += 1;
+          if (keys['ArrowDown'] || keys['KeyS']) ky -= 1;
+          mx = clamp(mx + kx, -1, 1);
+          my = clamp(my + ky, -1, 1);
         }
 
-        state.yaw = THREE.MathUtils.lerp(state.yaw, mx * MAX_YAW, 1 - Math.pow(0.001, dt));
-        state.pitch = THREE.MathUtils.lerp(state.pitch, my * MAX_PITCH, 1 - Math.pow(0.001, dt));
+        // 输入映射为角速度：保持倾斜/按住 = 持续转向，回正才停止
+        const targetYawRate = mx * MAX_YAW_RATE;
+        const targetPitchRate = my * MAX_PITCH_RATE;
+        state.yawRate = THREE.MathUtils.lerp(state.yawRate, targetYawRate, 1 - Math.pow(0.001, dt));
+        state.pitchRate = THREE.MathUtils.lerp(state.pitchRate, targetPitchRate, 1 - Math.pow(0.001, dt));
+        state.yaw += state.yawRate * dt;
+        state.pitch = clamp(state.pitch + state.pitchRate * dt, -MAX_PITCH_ANGLE, MAX_PITCH_ANGLE);
+
         const targetSpeed = state.boosting ? state.boostSpeed : state.cruiseSpeed;
         state.speed = THREE.MathUtils.lerp(state.speed, targetSpeed, 1 - Math.pow(0.02, dt));
 
         const cp = Math.cos(state.pitch);
         dir.set(-Math.sin(state.yaw) * cp, Math.sin(state.pitch), -Math.cos(state.yaw) * cp).normalize();
         player.group.position.addScaledVector(dir, state.speed * dt);
-        state.roll = THREE.MathUtils.lerp(state.roll, -mx * 0.7, 1 - Math.pow(0.001, dt));
+        state.roll = THREE.MathUtils.lerp(state.roll, -mx * 0.8, 1 - Math.pow(0.001, dt));
         player.group.rotation.set(state.pitch, state.yaw, state.roll);
 
         if (player.group.position.y < 7) { player.group.position.y = 7; state.pitch = Math.max(state.pitch, 0); }
@@ -716,7 +731,7 @@
       // 金币
       for (let i = coins.length - 1; i >= 0; i--) {
         const c = coins[i];
-        c.mesh.rotation.y += dt * 3;
+        c.mesh.lookAt(camera.position); // 始终面向玩家，呈直立金色圆环
         const d = c.mesh.position.distanceTo(player.group.position);
         if (started && !gameOver && d < c.r + 4) {
           removeCoin(i);
@@ -740,7 +755,7 @@
             e.prop.rotation.z += dt * 30;
           }
           // 敌机撞玩家
-          if (dist < e.r + 5) {
+          if (dist < e.r + PLAYER_RADIUS) {
             damagePlayer();
             removeEnemy(i);
             removed = true;
@@ -824,7 +839,7 @@
       while (coins.length) removeCoin(coins.length - 1);
       while (bullets.length) removeBullet(bullets.length - 1);
       state.lives = 3; state.score = 0; state.coinCount = 0; state.invuln = 0;
-      state.yaw = 0; state.pitch = 0; state.roll = 0;
+      state.yaw = 0; state.pitch = 0; state.roll = 0; state.yawRate = 0; state.pitchRate = 0;
       player.group.position.set(0, 160, 0); player.group.rotation.set(0, 0, 0);
       player.group.visible = true;
       spawnAccum = 0; gameOver = false;
