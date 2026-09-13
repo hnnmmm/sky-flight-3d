@@ -419,7 +419,6 @@
       lives: 3, score: 0, coinCount: 0, invuln: 0,
     };
     const MAX_YAW_RATE = 1.7, MAX_PITCH_RATE = 1.3, MAX_PITCH_ANGLE = 1.15;
-    const MAX_YAW_ANGLE = Math.PI;          // 水平航向最大偏移（支持回头，360° 环绕）
     const DEADZONE_DEG = 4; // 直飞死区半径（度）：以正方向为圆心、该半径内的微小指向视为直飞（径向死区）
     const PLAYER_RADIUS = 2.6;
     let started = false, gameOver = false;
@@ -435,10 +434,14 @@
       available: false, alpha: 0, beta: 0, gamma: 0,
       baseSet: false,
       baseFwd: new THREE.Vector3(0, 0, -1), // 「正方向」基准：点「重置方向」那一刻的屏幕指向
+      baseYaw: 0, basePitch: 0, // 重置那一刻飞机的实际航向/俯仰，屏幕相对偏转在其上叠加
     };
     const _gyroEuler = new THREE.Euler();
     const _gyroQuat = new THREE.Quaternion();
     const _gyroFwd = new THREE.Vector3();
+    const _gyroQ1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -90° 绕 X：让「前向」= 设备背面（屏幕指向）
+    const _gyroQScreen = new THREE.Quaternion();
+    const _gyroZee = new THREE.Vector3(0, 0, 1);
 
     // 角度差归一化到 (-180°, 180°]（弧度版）
     const normAngleRad = (a) => {
@@ -447,31 +450,43 @@
       return x - Math.PI;
     };
 
+    // 屏幕物理旋转角（竖屏=0，横屏=±90），用于补偿横竖屏，保证「屏幕指向」与「设备朝向」一致
+    function screenOrientationDeg() {
+      if (typeof screen !== 'undefined' && screen.orientation && screen.orientation.angle != null) return screen.orientation.angle;
+      return window.orientation || 0;
+    }
+
     // 由 DeviceOrientation 的 alpha/beta/gamma 算出「屏幕背面指向」的世界方向（单位向量）。
-    // 屏幕背面即机头前进方向：把手机屏幕转向哪个空间方向，飞机就朝那个方向飞。
+    // 屏幕背面即机头前进方向：把手机屏幕转向哪个空间方向，飞机就朝那个方向飞（像透过手机视窗看向 3D 世界）。
     function gyroDirection(out) {
-      // Three.js 与 W3C 一致的符号约定：绕 Z(alpha) → 绕 X(beta) → 绕 Y(gamma)，Euler 顺序 'YXZ'
+      // Three.js DeviceOrientationControls 同款算法：绕 Z(alpha) → 绕 X(beta) → 绕 Y(gamma)，Euler 顺序 'YXZ'
       _gyroEuler.set(gyro.beta * RAD, gyro.alpha * RAD, -gyro.gamma * RAD, 'YXZ');
       _gyroQuat.setFromEuler(_gyroEuler);
-      out.set(0, 0, -1).applyQuaternion(_gyroQuat); // 设备 -Z（屏幕背面）转到 ENU 世界系
-      // ENU(x=东, y=北, z=上) → 游戏系(x, y=上, z)；只需保证「上=上」，绝对方位由基准校准抵消
-      const ex = out.x, ey = out.y, ez = out.z;
-      return out.set(ex, ez, ey).normalize();
+      _gyroQuat.multiply(_gyroQ1); // 关键：-90° 绕 X，把「屏幕朝上」校正为「屏幕背面朝前」= 视窗看向的方向
+      const orient = screenOrientationDeg() * RAD;
+      if (orient) _gyroQuat.multiply(_gyroQScreen.setFromAxisAngle(_gyroZee, -orient)); // 横竖屏补偿
+      return out.set(0, 0, -1).applyQuaternion(_gyroQuat).normalize(); // 设备 -Z（屏幕背面）→ 游戏世界方向
     }
 
     function enableGyro() {
-      window.addEventListener('deviceorientation', (e) => {
-        if (e.gamma == null && e.beta == null) return;
+      // 优先用绝对方位（带磁力计，alpha 更稳）；不支持则退回普通 deviceorientation
+      const absoluteSupported = 'ondeviceorientationabsolute' in window;
+      const onOrient = (e) => {
+        if (e.alpha == null) return;
         gyro.available = true;
         gyro.alpha = e.alpha || 0;
         gyro.beta = e.beta || 0;
         gyro.gamma = e.gamma || 0;
-      });
+      };
+      if (absoluteSupported) window.addEventListener('deviceorientationabsolute', onOrient);
+      window.addEventListener('deviceorientation', onOrient);
     }
 
     // 「重置方向」：把当前手机朝向（屏幕指向）记录为「直飞」基准
     function resetDirection() {
       gyroDirection(gyro.baseFwd);
+      gyro.baseYaw = state.yaw;     // 记录「重置」瞬间飞机的真实航向，作为新一轮直飞基准
+      gyro.basePitch = state.pitch;
       gyro.baseSet = true;
     }
 
@@ -736,8 +751,10 @@
             dyaw *= k; dpitch *= k;
           }
 
-          const targetYaw = clamp(dyaw, -MAX_YAW_ANGLE, MAX_YAW_ANGLE);
-          const targetPitch = clamp(dpitch, -MAX_PITCH_ANGLE, MAX_PITCH_ANGLE);
+          // 关键：屏幕偏转是「相对基准」的增量，必须叠加在重置那一刻的飞机航向上，
+          // 而不是当成世界 -Z 轴的绝对角。否则多次转弯/重设后方向就会乱、甚至“反向”。
+          const targetYaw = gyro.baseYaw + dyaw;                       // 航向不夹死，支持 360° 环绕
+          const targetPitch = clamp(gyro.basePitch + dpitch, -MAX_PITCH_ANGLE, MAX_PITCH_ANGLE);
 
           // 平滑跟随：机头持续贴向屏幕指向，松手不回中
           const follow = 1 - Math.exp(-dt / 0.05);
